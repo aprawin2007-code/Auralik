@@ -1,0 +1,287 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserStatus {
+  ONLINE
+  OFFLINE
+  MATCHING
+  IN_CALL
+}
+
+enum MatchStatus {
+  ACTIVE
+  ENDED
+}
+
+enum FriendRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model AnonymousUser {
+  id          String       @id @default(uuid()) @db.Uuid
+  deviceId    String       @unique @db.VarChar(100)
+  nickname    String?      @db.VarChar(50)
+  status      UserStatus   @default(OFFLINE)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  
+  // Moderation fields
+  isBanned    Boolean      @default(false)
+  bannedUntil DateTime?
+  banReason   String?      @db.Text
+  isMuted     Boolean      @default(false)
+  mutedUntil  DateTime?
+  muteReason  String?      @db.Text
+  
+  countryId   String?      @db.Uuid
+  country     Country?     @relation(fields: [countryId], references: [id], onDelete: SetNull)
+
+  sessions                 Session[]
+  matchQueue               MatchQueue?
+  activeMatchParticipant1  ActiveMatch[]            @relation("User1ActiveMatches")
+  activeMatchParticipant2  ActiveMatch[]            @relation("User2ActiveMatches")
+  friendRequestsSent       FriendRequest[]          @relation("SenderFriendRequests")
+  friendRequestsReceived   FriendRequest[]          @relation("ReceiverFriendRequests")
+  friends                  Friend[]                 @relation("UserFriends")
+  friendOf                 Friend[]                 @relation("FriendUsers")
+  preferences              UserPreference?
+  interests                AnonymousUserInterest[]
+  languages                AnonymousUserLanguage[]
+  reportsMade              Report[]                 @relation("ReporterReports")
+  reportsReceived          Report[]                 @relation("ReportedReports")
+  blockedUsers             BlockedUser[]            @relation("BlockerBlocks")
+  blockedBy                BlockedUser[]            @relation("BlockedBlocks")
+  notifications            Notification[]
+
+  @@index([status])
+  @@index([countryId])
+  @@index([deviceId])
+}
+
+model Session {
+  id        String        @id @default(uuid()) @db.Uuid
+  userId    String        @db.Uuid
+  user      AnonymousUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String        @unique @db.VarChar(500)
+  expiresAt DateTime
+  createdAt DateTime      @default(now())
+
+  @@index([userId])
+}
+
+model MatchQueue {
+  id               String        @id @default(uuid()) @db.Uuid
+  userId           String        @unique @db.Uuid
+  user             AnonymousUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt         DateTime      @default(now())
+  priority         Int           @default(0)
+  targetLanguageId String?       @db.Uuid
+  targetLanguage   Language?     @relation(fields: [targetLanguageId], references: [id], onDelete: SetNull)
+  targetCountryId  String?       @db.Uuid
+  targetCountry    Country?      @relation(fields: [targetCountryId], references: [id], onDelete: SetNull)
+
+  @@index([joinedAt])
+  @@index([priority])
+}
+
+model ActiveMatch {
+  id        String      @id @default(uuid()) @db.Uuid
+  user1Id   String      @db.Uuid
+  user1     AnonymousUser @relation("User1ActiveMatches", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2Id   String      @db.Uuid
+  user2     AnonymousUser @relation("User2ActiveMatches", fields: [user2Id], references: [id], onDelete: Cascade)
+  status    MatchStatus @default(ACTIVE)
+  createdAt DateTime    @default(now())
+  endedAt   DateTime?
+
+  @@index([user1Id])
+  @@index([user2Id])
+  @@index([status])
+}
+
+model FriendRequest {
+  id         String              @id @default(uuid()) @db.Uuid
+  senderId   String              @db.Uuid
+  sender     AnonymousUser       @relation("SenderFriendRequests", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId String              @db.Uuid
+  receiver   AnonymousUser       @relation("ReceiverFriendRequests", fields: [receiverId], references: [id], onDelete: Cascade)
+  status     FriendRequestStatus @default(PENDING)
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  @@unique([senderId, receiverId])
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([status])
+}
+
+model Friend {
+  id                String        @id @default(uuid()) @db.Uuid
+  userId            String        @db.Uuid
+  user              AnonymousUser @relation("UserFriends", fields: [userId], references: [id], onDelete: Cascade)
+  friendId          String        @db.Uuid
+  friend            AnonymousUser @relation("FriendUsers", fields: [friendId], references: [id], onDelete: Cascade)
+  isFavorite        Boolean       @default(false)
+  lastInteractedAt  DateTime?     // Updated when a call/message happens between friends
+  createdAt         DateTime      @default(now())
+
+  @@unique([userId, friendId])
+  @@index([userId])
+  @@index([friendId])
+  @@index([userId, isFavorite])
+  @@index([userId, lastInteractedAt])
+}
+
+model UserPreference {
+  id                  String        @id @default(uuid()) @db.Uuid
+  userId              String        @unique @db.Uuid
+  user                AnonymousUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  theme               String        @default("dark") @db.VarChar(20)
+  cameraEnabled       Boolean       @default(true)
+  micEnabled          Boolean       @default(true)
+  soundEnabled        Boolean       @default(true)
+  notificationEnabled Boolean       @default(true)
+  privacyMode         Boolean       @default(false)
+}
+
+model Interest {
+  id    String                  @id @default(uuid()) @db.Uuid
+  name  String                  @unique @db.VarChar(100)
+  users AnonymousUserInterest[]
+}
+
+model AnonymousUserInterest {
+  id         String        @id @default(uuid()) @db.Uuid
+  userId     String        @db.Uuid
+  user       AnonymousUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  interestId String        @db.Uuid
+  interest   Interest      @relation(fields: [interestId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, interestId])
+  @@index([userId])
+  @@index([interestId])
+}
+
+model Language {
+  id          String                  @id @default(uuid()) @db.Uuid
+  code        String                  @unique @db.VarChar(10)
+  name        String                  @db.VarChar(100)
+  users       AnonymousUserLanguage[]
+  matchQueues MatchQueue[]
+}
+
+model AnonymousUserLanguage {
+  id         String        @id @default(uuid()) @db.Uuid
+  userId     String        @db.Uuid
+  user       AnonymousUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  languageId String        @db.Uuid
+  language   Language      @relation(fields: [languageId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, languageId])
+  @@index([userId])
+  @@index([languageId])
+}
+
+model Country {
+  id          String          @id @default(uuid()) @db.Uuid
+  code        String          @unique @db.VarChar(10)
+  name        String          @db.VarChar(100)
+  users       AnonymousUser[]
+  matchQueues MatchQueue[]
+}
+
+enum ReportStatus {
+  PENDING
+  RESOLVED
+  DISMISSED
+}
+
+model Report {
+  id          String        @id @default(uuid()) @db.Uuid
+  reporterId  String        @db.Uuid
+  reporter    AnonymousUser @relation("ReporterReports", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedId  String        @db.Uuid
+  reported    AnonymousUser @relation("ReportedReports", fields: [reportedId], references: [id], onDelete: Cascade)
+  reason      String        @db.VarChar(200)
+  description String?       @db.Text
+  status      ReportStatus  @default(PENDING)
+  
+  // Future AI moderation fields
+  aiScore     Float?        // Confidence score (0.0 to 1.0)
+  aiFlagged   Boolean       @default(false)
+  aiMetadata  Json?         // Flexible AI analysis data (categories, toxic terms, etc.)
+  
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([reporterId])
+  @@index([reportedId])
+  @@index([status])
+  @@index([aiFlagged])
+}
+
+model BlockedUser {
+  id        String        @id @default(uuid()) @db.Uuid
+  blockerId String        @db.Uuid
+  blocker   AnonymousUser @relation("BlockerBlocks", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId String        @db.Uuid
+  blocked   AnonymousUser @relation("BlockedBlocks", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+
+  @@unique([blockerId, blockedId])
+  @@index([blockerId])
+  @@index([blockedId])
+}
+
+model Notification {
+  id        String        @id @default(uuid()) @db.Uuid
+  userId    String        @db.Uuid
+  user      AnonymousUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String        @db.VarChar(100)
+  content   String        @db.Text
+  isRead    Boolean       @default(false)
+  createdAt DateTime      @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+}
+
+model Admin {
+  id           String     @id @default(uuid()) @db.Uuid
+  username     String     @unique @db.VarChar(50)
+  passwordHash String     @db.VarChar(255)
+  createdAt    DateTime   @default(now())
+  auditLogs    AuditLog[]
+}
+
+enum AuditAction {
+  USER_BAN
+  USER_UNBAN
+  USER_MUTE
+  USER_UNMUTE
+  REPORT_RESOLVE
+  REPORT_DISMISS
+}
+
+model AuditLog {
+  id          String      @id @default(uuid()) @db.Uuid
+  adminId     String?     @db.Uuid
+  admin       Admin?      @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  action      AuditAction
+  targetId    String      @db.Uuid // ID of user or report affected
+  targetType  String      @db.VarChar(50) // "USER" or "REPORT"
+  reason      String      @db.Text
+  createdAt   DateTime    @default(now())
+
+  @@index([adminId])
+  @@index([action])
+  @@index([targetId])
+}

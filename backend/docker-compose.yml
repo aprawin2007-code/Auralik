@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: aura-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: aura_user
+      POSTGRES_PASSWORD: aura_secure_password_2026
+      POSTGRES_DB: aura_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aura_user -d aura_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: aura-redis
+    restart: always
+    command: redis-server --requirepass aura_redis_secure_password_2026
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "aura_redis_secure_password_2026", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aura-backend
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - API_PREFIX=api/v1
+      - CORS_ORIGINS=http://localhost:8000
+      - DATABASE_URL=postgresql://aura_user:aura_secure_password_2026@postgres:5432/aura_db?schema=public&connection_limit=20
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=aura_redis_secure_password_2026
+      - JWT_SECRET=aura_prod_jwt_secret_key_extremely_long_2026
+      - JWT_EXPIRATION=15m
+      - JWT_REFRESH_SECRET=aura_prod_jwt_refresh_secret_key_extremely_long_2026
+      - JWT_REFRESH_EXPIRATION=7d
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
+  redis_data:
