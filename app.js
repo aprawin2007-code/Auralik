@@ -35,115 +35,11 @@ class AuraApplication {
       activeSocialChatId: null,
       socialSearchQuery: '',
       socialActiveTab: 'recent',
-      friends: [
-        {
-          id: 1,
-          name: "Aria Vance",
-          location: "Stockholm, SE",
-          color: "hsl(263, 85%, 65%)",
-          status: "online",
-          avatar: "AV",
-          unread: 2,
-          messages: [
-            { text: "Hey! Loved our conversation about UI/UX design last time.", direction: "incoming", time: "10:14 AM" },
-            { text: "Thanks Aria! Aura is looking amazing.", direction: "outgoing", time: "10:15 AM" },
-            { text: "Have you tested the new immersive full-bleed layouts yet?", direction: "incoming", time: "10:20 AM" }
-          ],
-          replies: [
-            "Oh yes, that draggable preview feels super responsive!",
-            "I'll share my screen to show you some mockup design vectors.",
-            "Catch you later in the lobby chat circles!"
-          ],
-          lastTime: "10:20 AM"
-        },
-        {
-          id: 2,
-          name: "Devon Chen",
-          location: "Toronto, CA",
-          color: "hsl(190, 95%, 45%)",
-          status: "away",
-          avatar: "DC",
-          unread: 0,
-          messages: [
-            { text: "Are we gaming tonight?", direction: "incoming", time: "Yesterday" }
-          ],
-          replies: [
-            "Nice! Count me in.",
-            "I am busy tweaking some WebRTC signaling parameters."
-          ],
-          lastTime: "Yesterday"
-        },
-        {
-          id: 3,
-          name: "Kai Tanaka",
-          location: "Tokyo, JP",
-          color: "hsl(142, 70%, 48%)",
-          status: "online",
-          avatar: "KT",
-          unread: 1,
-          messages: [
-            { text: "Aura's design system playground is gorgeous.", direction: "incoming", time: "Yesterday" }
-          ],
-          replies: [
-            "Arigato! Standard HSL styling is highly customizable.",
-            "Let's chat about responsive layouts next time."
-          ],
-          lastTime: "Yesterday"
-        }
-      ]
+      friends: []
     };
 
-    // Database of simulated strangers for matching based on interests
-    this.mockStrangers = [
-      { 
-        name: "Aria Vance", 
-        location: "Stockholm, SE", 
-        interest: "design", 
-        color: "hsl(263, 85%, 65%)",
-        replies: [
-          "Hey there! The typography scale in this chat feels so clean.",
-          "I really appreciate the 8px grid. The spacing is super elegant.",
-          "The interactive transition animations here are top-tier. Did you design them?",
-          "It's rare to see custom HTML inputs that are this accessible and stylish."
-        ] 
-      },
-      { 
-        name: "Devon Chen", 
-        location: "San Francisco, US", 
-        interest: "tech", 
-        color: "hsl(190, 95%, 45%)",
-        replies: [
-          "What's up! The WebRTC signaling latency here feels incredibly low.",
-          "I'm currently coding a custom CSS framework. Your design tokens are beautiful.",
-          "Dark mode by default is a major plus. It saves my eyes during night sessions.",
-          "Are you using hardware acceleration for these canvas particle systems?"
-        ] 
-      },
-      { 
-        name: "Ren Sato", 
-        location: "Tokyo, JP", 
-        interest: "gaming", 
-        color: "hsl(38, 92%, 50%)",
-        replies: [
-          "Yo! The refresh rate on this matching UI is super smooth.",
-          "Are you playing anything competitive this weekend?",
-          "This room is way cleaner than other messy chat sites. Absolutely minimal.",
-          "Nice matching setup. Tech filtering works perfectly!"
-        ] 
-      },
-      { 
-        name: "Elena Rostova", 
-        location: "Berlin, DE", 
-        interest: "music", 
-        color: "hsl(142, 70%, 48%)",
-        replies: [
-          "Hello! The audio channels sound exceptionally crisp here.",
-          "I was just listening to some ambient synth loops before we matched.",
-          "Your profile layout has a gorgeous glassmorphism effect.",
-          "Do you create music, or do you just enjoy listening?"
-        ] 
-      }
-    ];
+    // Database of simulated strangers for matching based on interests (starts empty, generated dynamically)
+    this.mockStrangers = [];
 
     // Animation frames storage
     this.animationFrames = {
@@ -166,6 +62,228 @@ class AuraApplication {
     this.initFAQAccordions();
     // Render initial icons
     lucide.createIcons();
+
+    // Load persisted state if exists
+    this.loadStateFromLocalStorage();
+  }
+
+  loadStateFromLocalStorage() {
+    try {
+      const friends = localStorage.getItem('aura_friends');
+      if (friends) {
+        this.state.friends = JSON.parse(friends);
+      } else {
+        this.state.friends = [];
+      }
+
+      const username = localStorage.getItem('aura_username');
+      if (username) {
+        this.state.username = username;
+        if (this.usernameInput) this.usernameInput.value = username;
+        if (this.onboardNickname) this.onboardNickname.value = username;
+      }
+
+      const selectedInterests = localStorage.getItem('aura_selected_interests');
+      if (selectedInterests) {
+        this.state.selectedInterests = JSON.parse(selectedInterests);
+        // Sync interest tag active classes
+        const tagElements = document.querySelectorAll('#interests-list .interest-tag');
+        tagElements.forEach(el => {
+          const interest = el.getAttribute('data-interest');
+          if (this.state.selectedInterests.includes(interest)) {
+            el.classList.add('active');
+          } else {
+            el.classList.remove('active');
+          }
+        });
+      }
+
+      const onboardingCompleted = localStorage.getItem('aura_onboarding_completed');
+      if (onboardingCompleted === 'true') {
+        this.state.onboardingCompleted = true;
+        setTimeout(() => {
+          this.switchPage('lobby-view');
+        }, 100);
+      }
+
+      const autoMute = localStorage.getItem('aura_auto_mute');
+      if (autoMute !== null) {
+        this.state.devices.autoMute = autoMute === 'true';
+        if (this.settingsAutoMute) {
+          this.settingsAutoMute.checked = this.state.devices.autoMute;
+        }
+      }
+
+      const theme = localStorage.getItem('aura_theme');
+      if (theme) {
+        this.applyTheme(theme);
+        setTimeout(() => {
+          const themeOptions = document.querySelectorAll('.theme-option');
+          themeOptions.forEach(btn => {
+            if (btn.getAttribute('data-theme') === theme) {
+              btn.classList.add('active');
+            } else {
+              btn.classList.remove('active');
+            }
+          });
+        }, 100);
+      }
+
+      const fontScale = localStorage.getItem('aura_font_scale');
+      if (fontScale) {
+        const sizes = { sm: '13px', md: '15px', lg: '17px' };
+        document.documentElement.style.setProperty('--font-base-size', sizes[fontScale] || '15px');
+        setTimeout(() => {
+          const fontScaleBtns = document.querySelectorAll('.font-scale-btn');
+          fontScaleBtns.forEach(btn => {
+            if (btn.getAttribute('data-scale') === fontScale) {
+              btn.classList.add('active');
+            } else {
+              btn.classList.remove('active');
+            }
+          });
+        }, 100);
+      }
+    } catch (e) {
+      console.error("Failed to load state from localStorage:", e);
+    }
+  }
+
+  saveStateToLocalStorage() {
+    try {
+      localStorage.setItem('aura_friends', JSON.stringify(this.state.friends));
+      localStorage.setItem('aura_username', this.state.username);
+      localStorage.setItem('aura_selected_interests', JSON.stringify(this.state.selectedInterests));
+      localStorage.setItem('aura_auto_mute', String(this.state.devices.autoMute));
+      localStorage.setItem('aura_onboarding_completed', String(!!this.state.onboardingCompleted));
+    } catch (e) {
+      console.error("Failed to save state to localStorage:", e);
+    }
+  }
+
+  generateRandomStranger(excludeName = null) {
+    const names = ["Liam Carter", "Sofia Kovalev", "Kofi Mensah", "Mei-Ling Zhou", "Mateo Silva", "Zoe Jenkins", "Aria Vance", "Devon Chen", "Ren Sato", "Elena Rostova"];
+    const locations = ["London, UK", "Berlin, DE", "Accra, GH", "Beijing, CN", "Rio de Janeiro, BR", "Toronto, CA", "Stockholm, SE", "San Francisco, US", "Tokyo, JP", "Sydney, AU"];
+    const colors = [
+      "hsl(263, 85%, 65%)",
+      "hsl(190, 95%, 45%)",
+      "hsl(38, 92%, 50%)",
+      "hsl(142, 70%, 48%)",
+      "hsl(340, 85%, 60%)",
+      "hsl(210, 80%, 55%)",
+      "hsl(15, 90%, 55%)"
+    ];
+    const interests = ["tech", "music", "gaming", "design", "movies", "science"];
+    const repliesByInterest = {
+      tech: [
+        "What's up! The WebRTC signaling latency here feels incredibly low.",
+        "I'm currently coding a custom CSS framework. Your design tokens are beautiful.",
+        "Dark mode by default is a major plus. It saves my eyes during night sessions.",
+        "Are you using hardware acceleration for these canvas particle systems?"
+      ],
+      music: [
+        "Hello! The audio channels sound exceptionally crisp here.",
+        "I was just listening to some ambient synth loops before we matched.",
+        "Your profile layout has a gorgeous glassmorphism effect.",
+        "Do you create music, or do you just enjoy listening?"
+      ],
+      gaming: [
+        "Yo! The refresh rate on this matching UI is super smooth.",
+        "Are you playing anything competitive this weekend?",
+        "This room is way cleaner than other messy chat sites. Absolutely minimal.",
+        "Nice matching setup. Tech filtering works perfectly!"
+      ],
+      design: [
+        "Hey there! The typography scale in this chat feels so clean.",
+        "I really appreciate the 8px grid. The spacing is super elegant.",
+        "The interactive transition animations here are top-tier. Did you design them?",
+        "It's rare to see custom HTML inputs that are this accessible and stylish."
+      ],
+      movies: [
+        "Hey! What's your favorite genre of movies?",
+        "I was just analyzing the cinematography of some sci-fi films.",
+        "The dark obsidian vibe of this app feels like a modern cinematic UI.",
+        "Have you watched anything mind-bending recently?"
+      ],
+      science: [
+        "Greetings! I was reading a paper on quantum computing just now.",
+        "The canvas particle background reminds me of orbital electrons.",
+        "It's fascinating how simple rules can create complex emergent behaviors in simulations.",
+        "What field of science or technology interests you the most?"
+      ]
+    };
+
+    let availableNames = names;
+    if (excludeName) {
+      availableNames = names.filter(n => n !== excludeName);
+    }
+    const chosenName = availableNames[Math.floor(Math.random() * availableNames.length)];
+    const chosenLocation = locations[Math.floor(Math.random() * locations.length)];
+    const chosenColor = colors[Math.floor(Math.random() * colors.length)];
+    
+    let chosenInterest = interests[Math.floor(Math.random() * interests.length)];
+    const overlap = this.state.selectedInterests.filter(i => interests.includes(i));
+    if (overlap.length > 0) {
+      chosenInterest = overlap[Math.floor(Math.random() * overlap.length)];
+    }
+    
+    const chosenReplies = [...(repliesByInterest[chosenInterest] || repliesByInterest.tech)];
+    
+    return {
+      name: chosenName,
+      location: chosenLocation,
+      interest: chosenInterest,
+      color: chosenColor,
+      replies: chosenReplies
+    };
+  }
+
+  addOrUpdateFriend(match, messageText = null, direction = 'incoming') {
+    let friend = this.state.friends.find(f => f.name === match.name);
+    const timeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    
+    if (!friend) {
+      const nextId = this.state.friends.length > 0 
+        ? Math.max(...this.state.friends.map(f => f.id)) + 1 
+        : 1;
+      
+      const initials = match.name.split(' ').map(n => n[0]).join('').toUpperCase();
+      
+      friend = {
+        id: nextId,
+        name: match.name,
+        location: match.location || "Unknown Location",
+        color: match.color || "hsl(210, 80%, 50%)",
+        status: "online",
+        avatar: initials,
+        unread: 0,
+        messages: [],
+        replies: [...(match.replies || [])],
+        lastTime: timeString
+      };
+      this.state.friends.push(friend);
+    }
+    
+    if (messageText) {
+      friend.messages.push({
+        text: messageText,
+        direction: direction,
+        time: timeString
+      });
+      friend.lastTime = timeString;
+      if (direction === 'incoming' && this.state.activeSocialChatId !== friend.id) {
+        friend.unread++;
+      }
+    }
+    
+    this.saveStateToLocalStorage();
+    
+    if (this.state.currentPage === 'social-view') {
+      this.renderSocialFriendList();
+      if (this.state.activeSocialChatId === friend.id) {
+        this.openSocialChat(friend.id);
+      }
+    }
   }
 
   initDOM() {
@@ -268,6 +386,7 @@ class AuraApplication {
     if (this.usernameInput) {
       this.usernameInput.addEventListener('change', (e) => {
         this.state.username = e.target.value || 'Anonymous Traveler';
+        this.saveStateToLocalStorage();
       });
     }
 
@@ -287,6 +406,7 @@ class AuraApplication {
           tag.classList.add('active');
           this.state.selectedInterests.push(interest);
         }
+        this.saveStateToLocalStorage();
       });
     });
 
@@ -566,6 +686,7 @@ class AuraApplication {
 
   savePreferences() {
     this.state.devices.autoMute = this.settingsAutoMute.checked;
+    this.saveStateToLocalStorage();
     this.toggleModal(false);
     this.dispatchToast("Device preferences updated successfully.", "success");
   }
@@ -631,17 +752,14 @@ class AuraApplication {
     this.state.isSearching = false;
     this.lobbyPulsar.classList.remove('searching');
 
-    // Select matched stranger from dataset based on interests if possible, otherwise random
-    const matches = this.mockStrangers.filter(stranger => 
-      this.state.selectedInterests.includes(stranger.interest)
-    );
-    const chosenMatch = matches.length > 0 
-      ? matches[Math.floor(Math.random() * matches.length)] 
-      : this.mockStrangers[Math.floor(Math.random() * this.mockStrangers.length)];
-
+    // Select matched stranger dynamically
+    const chosenMatch = this.generateRandomStranger();
     this.state.currentMatch = chosenMatch;
     
     this.dispatchToast("Match Companion Found! Initiating Call...", "success");
+
+    // Add match to friends list
+    this.addOrUpdateFriend(chosenMatch);
 
     // Route view to video room page
     setTimeout(() => {
@@ -953,13 +1071,13 @@ class AuraApplication {
     this.remoteLabel.innerText = "Finding Match...";
 
     // 2. Choose new stranger randomly
-    const matches = this.mockStrangers.filter(stranger => 
-      stranger.name !== this.state.currentMatch.name
-    );
-    const chosenMatch = matches[Math.floor(Math.random() * matches.length)];
+    const chosenMatch = this.generateRandomStranger(this.state.currentMatch ? this.state.currentMatch.name : null);
     this.state.currentMatch = chosenMatch;
 
     this.clearChatMessages();
+
+    // Add match to friends list
+    this.addOrUpdateFriend(chosenMatch);
 
     // 3. Simulate connect timer
     setTimeout(() => {
@@ -1371,6 +1489,7 @@ class AuraApplication {
     if (this.usernameInput) {
       this.usernameInput.value = this.state.username;
     }
+    this.saveStateToLocalStorage();
     this.nextOnboardingStep();
   }
 
@@ -1380,6 +1499,9 @@ class AuraApplication {
       this.dispatchToast("Please accept guidelines policy to match.", "warning");
       return;
     }
+
+    this.state.onboardingCompleted = true;
+    this.saveStateToLocalStorage();
 
     // Progress into final scanner step
     this.state.onboardingStep = 8;
@@ -1410,12 +1532,7 @@ class AuraApplication {
 
     // Simulate match connection delay before entering Call page
     setTimeout(() => {
-      const matches = this.mockStrangers.filter(stranger => 
-        this.state.selectedInterests.includes(stranger.interest)
-      );
-      const chosenMatch = matches.length > 0 
-        ? matches[Math.floor(Math.random() * matches.length)] 
-        : this.mockStrangers[Math.floor(Math.random() * this.mockStrangers.length)];
+      const chosenMatch = this.generateRandomStranger();
 
       this.state.currentMatch = chosenMatch;
 
@@ -1424,6 +1541,9 @@ class AuraApplication {
         showMatchFoundAnimation(chosenMatch.name);
       }
       this.dispatchToast(`Match found! Connecting with ${chosenMatch.name}...`, 'success');
+
+      // Add match to friends list
+      this.addOrUpdateFriend(chosenMatch);
 
       setTimeout(() => {
         this.switchPage('video-view');
@@ -1682,6 +1802,8 @@ class AuraApplication {
     // Re-render friends list to update snippets in sidebar
     this.renderSocialFriendList();
 
+    this.saveStateToLocalStorage();
+
     // Trigger typing reply simulation
     this.triggerSocialTypingReply(friend.id);
   }
@@ -1751,6 +1873,7 @@ class AuraApplication {
 
         // Refresh friend card sidebar list
         this.renderSocialFriendList();
+        this.saveStateToLocalStorage();
         this.dispatchToast(`New message from ${friend.name}`, "info");
 
       }, 2000);
@@ -1847,6 +1970,9 @@ class AuraApplication {
         const scale = btn.getAttribute('data-scale');
         const sizes = { sm: '13px', md: '15px', lg: '17px' };
         document.documentElement.style.setProperty('--font-base-size', sizes[scale] || '15px');
+        try {
+          localStorage.setItem('aura_font_scale', scale);
+        } catch (e) {}
         this.dispatchToast('Font size updated.', 'info');
       });
     });
@@ -1906,6 +2032,9 @@ class AuraApplication {
     const vars = themes[theme];
     if (vars) {
       Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v));
+      try {
+        localStorage.setItem('aura_theme', theme);
+      } catch (e) {}
     }
   }
 
