@@ -1,5 +1,6 @@
 # ── BUILD STAGE ──────────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
+RUN apk add --no-cache openssl libc6-compat
 
 WORKDIR /usr/src/app
 
@@ -19,6 +20,7 @@ RUN npm prune --production
 
 # ── RUNTIME STAGE ────────────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
+RUN apk add --no-cache openssl libc6-compat
 
 WORKDIR /usr/src/app
 

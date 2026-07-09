@@ -38,8 +38,7 @@ class AuraApplication {
       friends: []
     };
 
-    // Database of simulated strangers for matching based on interests (starts empty, generated dynamically)
-    this.mockStrangers = [];
+    // Simulated stranger data is generated on-the-fly via generateRandomStranger(). No static mock array is used.
 
     // Animation frames storage
     this.animationFrames = {
@@ -373,8 +372,36 @@ class AuraApplication {
     this.navButtons.forEach(btn => {
       btn.addEventListener('click', () => {
         this.switchPage(btn.getAttribute('data-page'));
+        // Close mobile menu on nav item click
+        const navLinks = document.getElementById('nav-links');
+        const hamburger = document.getElementById('nav-hamburger');
+        if (navLinks) navLinks.classList.remove('mobile-open');
+        if (hamburger) {
+          hamburger.classList.remove('open');
+          hamburger.setAttribute('aria-expanded', 'false');
+        }
       });
     });
+
+    // Mobile hamburger menu toggle
+    const hamburgerBtn = document.getElementById('nav-hamburger');
+    const navLinksEl = document.getElementById('nav-links');
+    if (hamburgerBtn && navLinksEl) {
+      hamburgerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = navLinksEl.classList.toggle('mobile-open');
+        hamburgerBtn.classList.toggle('open', isOpen);
+        hamburgerBtn.setAttribute('aria-expanded', String(isOpen));
+      });
+      // Close mobile nav when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!hamburgerBtn.contains(e.target) && !navLinksEl.contains(e.target)) {
+          navLinksEl.classList.remove('mobile-open');
+          hamburgerBtn.classList.remove('open');
+          hamburgerBtn.setAttribute('aria-expanded', 'false');
+        }
+      });
+    }
 
     // Logo routing
     document.getElementById('nav-logo').addEventListener('click', (e) => {
@@ -416,10 +443,16 @@ class AuraApplication {
       this.lobbyPulsar.addEventListener('click', () => this.toggleMatching());
     }
 
-    // Video Control actions
-    this.btnMic.addEventListener('click', () => this.toggleMicrophone());
-    this.btnVideo.addEventListener('click', () => this.toggleCamera());
-    this.btnShare.addEventListener('click', () => this.toggleScreenShare());
+    // Video Control actions (Toggle video is removed from UI and disabled in JS)
+    if (this.btnMic) {
+      this.btnMic.addEventListener('click', () => this.toggleMicrophone());
+    }
+    if (this.btnVideo) {
+      this.btnVideo.style.display = 'none';
+    }
+    if (this.btnShare) {
+      this.btnShare.style.display = 'none';
+    }
     this.btnNext.addEventListener('click', () => this.nextMatch());
     this.btnDisconnect.addEventListener('click', () => this.disconnectCall());
 
@@ -534,6 +567,29 @@ class AuraApplication {
       this.socialMobileBack.addEventListener('click', () => {
         const layout = document.getElementById('social-layout-container');
         if (layout) layout.classList.remove('chat-active');
+      });
+    }
+
+    // Camera warning retry button
+    const retryCamBtn = document.getElementById('retry-camera-btn');
+    if (retryCamBtn) {
+      retryCamBtn.addEventListener('click', () => {
+        this.dispatchToast("Retrying camera connection...", "info");
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+          .then(stream => {
+            this.state.localStream = stream;
+            if (this.localVideo) {
+              this.localVideo.srcObject = stream;
+              this.localVideo.style.display = 'block';
+              this.localCanvas.style.display = 'none';
+            }
+            this.hideCameraInterruptionWarning();
+            this.startCameraMonitoring();
+            this.dispatchToast("Camera connected successfully.", "success");
+          })
+          .catch(() => {
+            this.dispatchToast("Could not connect to camera. Please check permissions.", "danger");
+          });
       });
     }
   }
@@ -703,33 +759,52 @@ class AuraApplication {
   }
 
   startSearching() {
-    this.state.isSearching = true;
-    
-    // Add pulsing states
-    this.lobbyPulsar.classList.add('searching');
-    this.lobbyIcon.setAttribute('data-lucide', 'loader-2');
-    this.lobbyIcon.classList.add('spin');
-    
-    // Update labels
-    this.lobbyStatusTitle.innerText = "Searching Vibe Channels...";
-    this.lobbyStatusDesc.innerText = `Filtering profiles matching [${this.state.selectedInterests.join(', ')}] in ${this.state.selectedRegion.toUpperCase()}...`;
-    
-    this.lobbyActionBtn.classList.remove('btn-primary');
-    this.lobbyActionBtn.classList.add('btn-secondary');
-    this.lobbyActionBtn.querySelector('span').innerText = "Cancel Search";
-    
-    this.dispatchToast("Searching for match companions...", "info");
-    lucide.createIcons();
+    // Request camera permission and verify video stream active before searching/joining
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      this.dispatchToast("Camera is required. Media capture is not supported by your browser.", "danger");
+      return;
+    }
 
-    // Setup simulated WebRTC connection timeout
-    this.state.searchTimer = setTimeout(() => {
-      this.simulateMatchFound();
-    }, 3200);
+    this.dispatchToast("Verifying camera status...", "info");
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      .then(stream => {
+        this.state.localStream = stream;
+        this.state.isSearching = true;
+        
+        // Add pulsing states
+        this.lobbyPulsar.classList.add('searching');
+        this.lobbyIcon.setAttribute('data-lucide', 'loader-2');
+        this.lobbyIcon.classList.add('spin');
+        
+        // Update labels
+        this.lobbyStatusTitle.innerText = "Searching Vibe Channels...";
+        this.lobbyStatusDesc.innerText = `Filtering profiles matching [${this.state.selectedInterests.join(', ')}] in ${this.state.selectedRegion.toUpperCase()}...`;
+        
+        this.lobbyActionBtn.classList.remove('btn-primary');
+        this.lobbyActionBtn.classList.add('btn-secondary');
+        this.lobbyActionBtn.querySelector('span').innerText = "Cancel Search";
+        
+        this.dispatchToast("Searching for match companions...", "info");
+        lucide.createIcons();
+
+        // Start monitoring camera status
+        this.startCameraMonitoring();
+
+        // Setup simulated WebRTC connection timeout
+        this.state.searchTimer = setTimeout(() => {
+          this.simulateMatchFound();
+        }, 3200);
+      })
+      .catch(err => {
+        this.dispatchToast("Camera is required. Please enable your camera to continue.", "danger");
+        this.showCameraInterruptionWarning();
+      });
   }
 
   stopSearching() {
     this.state.isSearching = false;
     clearTimeout(this.state.searchTimer);
+    this.stopCameraMonitoring(); // Stop monitoring when searching stops
 
     // Reset pulsar state
     this.lobbyPulsar.classList.remove('searching');
@@ -840,26 +915,34 @@ class AuraApplication {
   initLocalFeed() {
     this.localPlaceholder.style.display = 'none';
     
-    // Check if real camera is requested and permission allows
-    if (this.state.devices.camera === 'default' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-        .then(stream => {
-          this.state.localStream = stream;
-          this.localVideo.srcObject = stream;
-          this.localVideo.style.display = 'block';
-          this.localCanvas.style.display = 'none';
-        })
-        .catch(err => {
-          // Camera block or error - use premium generative visual placeholder
-          this.localVideo.style.display = 'none';
-          this.localCanvas.style.display = 'block';
-          this.startMockStream('local', 'hsl(190, 95%, 45%)');
-        });
+    const bindStream = (stream) => {
+      this.state.localStream = stream;
+      this.localVideo.srcObject = stream;
+      this.localVideo.style.display = 'block';
+      this.localCanvas.style.display = 'none';
+      this.startCameraMonitoring();
+    };
+
+    if (this.state.localStream && this.state.localStream.active && this.state.localStream.getVideoTracks().length > 0) {
+      bindStream(this.state.localStream);
     } else {
-      // Direct mock fallback
-      this.localVideo.style.display = 'none';
-      this.localCanvas.style.display = 'block';
-      this.startMockStream('local', 'hsl(190, 95%, 45%)');
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+          .then(stream => {
+            bindStream(stream);
+          })
+          .catch(err => {
+            this.localVideo.style.display = 'none';
+            this.localCanvas.style.display = 'none';
+            this.localPlaceholder.style.display = 'flex';
+            this.showCameraInterruptionWarning();
+          });
+      } else {
+        this.localVideo.style.display = 'none';
+        this.localCanvas.style.display = 'none';
+        this.localPlaceholder.style.display = 'flex';
+        this.showCameraInterruptionWarning();
+      }
     }
   }
 
@@ -975,32 +1058,8 @@ class AuraApplication {
   }
 
   toggleCamera() {
-    this.state.isVideoOff = !this.state.isVideoOff;
-
-    if (this.state.localStream) {
-      this.state.localStream.getVideoTracks().forEach(track => {
-        track.enabled = !this.state.isVideoOff;
-      });
-    }
-
-    if (this.state.isVideoOff) {
-      this.localVideo.style.display = 'none';
-      this.localCanvas.style.display = 'none';
-      this.localPlaceholder.style.display = 'flex';
-      this.stopMockStream('local');
-    } else {
-      this.localPlaceholder.style.display = 'none';
-      if (this.state.localStream) {
-        this.localVideo.style.display = 'block';
-      } else {
-        this.localCanvas.style.display = 'block';
-        this.startMockStream('local', 'hsl(190, 95%, 45%)');
-      }
-    }
-
-    this.updateControlsUI();
-    const alertMsg = this.state.isVideoOff ? "Video stream disabled." : "Video stream enabled.";
-    this.dispatchToast(alertMsg, this.state.isVideoOff ? "danger" : "success");
+    // Camera is required and must remain ON during active call sessions.
+    this.dispatchToast("Camera must remain ON during active call sessions.", "warning");
   }
 
   toggleScreenShare() {
@@ -1030,29 +1089,18 @@ class AuraApplication {
       this.btnMic.classList.remove('btn-danger');
       this.btnMic.classList.add('btn-secondary');
       this.btnMic.innerHTML = `<i data-lucide="mic" class="icon"></i><span class="tooltip">Mute Microphone</span>`;
+       // 2. Video control icon & tooltip update (Always forced ON / hidden)
+    if (this.btnVideo) {
+      this.btnVideo.style.display = 'none';
     }
 
-    // 2. Video control icon & tooltip update
-    if (this.state.isVideoOff) {
-      this.btnVideo.classList.add('btn-danger');
-      this.btnVideo.classList.remove('btn-secondary');
-      this.btnVideo.innerHTML = `<i data-lucide="video-off" class="icon"></i><span class="tooltip">Enable Video Feed</span>`;
-    } else {
-      this.btnVideo.classList.remove('btn-danger');
-      this.btnVideo.classList.add('btn-secondary');
-      this.btnVideo.innerHTML = `<i data-lucide="video" class="icon"></i><span class="tooltip">Disable Video Feed</span>`;
-    }
-
-    // 3. Screen share visual indicator
-    if (this.state.isScreenSharing) {
-      this.btnShare.style.background = 'var(--primary)';
-      this.btnShare.style.color = '#ffffff';
-    } else {
-      this.btnShare.style.background = '';
-      this.btnShare.style.color = '';
+    // 3. Screen share visual indicator (hidden)
+    if (this.btnShare) {
+      this.btnShare.style.display = 'none';
     }
 
     lucide.createIcons();
+  }
   }
 
   nextMatch() {
@@ -1114,6 +1162,7 @@ class AuraApplication {
   disconnectCall(routeToLobby = true) {
     this.stopMockStream('local');
     this.stopMockStream('remote');
+    this.stopCameraMonitoring(); // Stop monitoring when call disconnected
 
     // Clear duration stopwatch
     clearInterval(this.state.callTimerInterval);
@@ -1448,14 +1497,10 @@ class AuraApplication {
           this.nextOnboardingStep();
         })
         .catch(err => {
-          this.dispatchToast("Camera blocked or unavailable. Proceeding with mockup visual streams.", "warning");
-          this.state.devices.camera = 'fallback-mock';
-          this.nextOnboardingStep();
+          this.dispatchToast("Camera access is mandatory to use Aura. Please enable it in browser settings.", "danger");
         });
     } else {
-      this.dispatchToast("Device media capture not supported. Fallback stream enabled.", "warning");
-      this.state.devices.camera = 'fallback-mock';
-      this.nextOnboardingStep();
+      this.dispatchToast("Your browser or device does not support media capture. Camera is required.", "danger");
     }
   }
 
@@ -1494,63 +1539,199 @@ class AuraApplication {
   }
 
   finalizeOnboarding() {
-    // Lock guidelines accept check
-    if (!this.onboardPledgeCheck.checked) {
-      this.dispatchToast("Please accept guidelines policy to match.", "warning");
+    // Verify active camera stream before finalizing onboarding
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      this.dispatchToast("Camera is required to match.", "danger");
       return;
     }
 
-    this.state.onboardingCompleted = true;
-    this.saveStateToLocalStorage();
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      .then(stream => {
+        this.state.localStream = stream;
+        this.startCameraMonitoring();
 
-    // Progress into final scanner step
-    this.state.onboardingStep = 8;
-    this.updateOnboardingUI();
-    this.dispatchToast("Initiating matching protocol...", "info");
+        this.state.onboardingCompleted = true;
+        this.saveStateToLocalStorage();
 
-    // Sync onboarding selected interests to settings
-    this.state.onboardingInterests = [];
-    const onboardTags = this.onboardInterests.querySelectorAll('.interest-tag');
-    onboardTags.forEach(el => {
-      if (el.classList.contains('active')) {
-        this.state.onboardingInterests.push(el.getAttribute('data-interest'));
+        // Progress into final scanner step
+        this.state.onboardingStep = 8;
+        this.updateOnboardingUI();
+        this.dispatchToast("Initiating matching protocol...", "info");
+
+        // Sync onboarding selected interests to settings
+        this.state.onboardingInterests = [];
+        const onboardTags = this.onboardInterests.querySelectorAll('.interest-tag');
+        onboardTags.forEach(el => {
+          if (el.classList.contains('active')) {
+            this.state.onboardingInterests.push(el.getAttribute('data-interest'));
+          }
+        });
+
+        this.state.selectedInterests = [...this.state.onboardingInterests];
+        
+        // Sync interest tag active classes
+        const tagElements = document.querySelectorAll('#interests-list .interest-tag');
+        tagElements.forEach(el => {
+          const interest = el.getAttribute('data-interest');
+          if (this.state.selectedInterests.includes(interest)) {
+            el.classList.add('active');
+          } else {
+            el.classList.remove('active');
+          }
+        });
+
+        // Simulate match connection delay before entering Call page
+        setTimeout(() => {
+          const chosenMatch = this.generateRandomStranger();
+
+          this.state.currentMatch = chosenMatch;
+
+          // Fire premium match-found animation overlay + confetti burst
+          if (window.showMatchFoundAnimation) {
+            showMatchFoundAnimation(chosenMatch.name);
+          }
+          this.dispatchToast(`Match found! Connecting with ${chosenMatch.name}...`, 'success');
+
+          // Add match to friends list
+          this.addOrUpdateFriend(chosenMatch);
+
+          setTimeout(() => {
+            this.switchPage('video-view');
+            this.startCallSession();
+          }, 2400); // allow animation to play
+
+        }, 3800);
+      })
+      .catch(err => {
+        this.dispatchToast("Camera is required. Please enable your camera to continue.", "danger");
+        this.showCameraInterruptionWarning();
+      });
+  }
+
+  /* ---- CAMERA ENFORCEMENT & MONITORING ENGINE ---- */
+  startCameraMonitoring() {
+    if (this.cameraMonitorInterval) {
+      clearInterval(this.cameraMonitorInterval);
+    }
+    this.cameraMonitorInterval = setInterval(() => {
+      this.checkCameraStatus();
+    }, 1000);
+  }
+
+  stopCameraMonitoring() {
+    if (this.cameraMonitorInterval) {
+      clearInterval(this.cameraMonitorInterval);
+      this.cameraMonitorInterval = null;
+    }
+    this.hideCameraInterruptionWarning();
+  }
+
+  checkCameraStatus() {
+    // Check if we need camera stream active
+    const needsCamera = (this.state.currentPage === 'video-view' || this.state.isSearching || (this.state.currentPage === 'onboarding-view' && this.state.onboardingStep === 8));
+    if (!needsCamera) {
+      this.hideCameraInterruptionWarning();
+      return;
+    }
+
+    let isCameraActive = false;
+    if (this.state.localStream && this.state.localStream.active) {
+      const videoTracks = this.state.localStream.getVideoTracks();
+      if (videoTracks.length > 0 && videoTracks[0].readyState === 'live') {
+        isCameraActive = true;
       }
-    });
+    }
 
-    this.state.selectedInterests = [...this.state.onboardingInterests];
-    
-    // Sync interest tag active classes
-    const tagElements = document.querySelectorAll('#interests-list .interest-tag');
-    tagElements.forEach(el => {
-      const interest = el.getAttribute('data-interest');
-      if (this.state.selectedInterests.includes(interest)) {
-        el.classList.add('active');
+    if (!isCameraActive) {
+      this.showCameraInterruptionWarning();
+    } else {
+      this.validateFaceAndFeed();
+    }
+  }
+
+  validateFaceAndFeed() {
+    if (!this.localVideo || this.localVideo.paused || this.localVideo.ended) {
+      return;
+    }
+
+    if (!this.analysisCanvas) {
+      this.analysisCanvas = document.createElement('canvas');
+      this.analysisCanvas.width = 16;
+      this.analysisCanvas.height = 16;
+      this.analysisCtx = this.analysisCanvas.getContext('2d');
+    }
+
+    try {
+      this.analysisCtx.drawImage(this.localVideo, 0, 0, 16, 16);
+      const imgData = this.analysisCtx.getImageData(0, 0, 16, 16);
+      const data = imgData.data;
+
+      // Compute average brightness to ensure feed isn't pitch black or covered
+      let totalBrightness = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+        totalBrightness += brightness;
+      }
+
+      const avgBrightness = totalBrightness / (16 * 16);
+
+      if (avgBrightness < 15) {
+        this.showCameraInterruptionWarning("Dark or obstructed camera feed detected. Please ensure your face is visible and feed is clear.");
       } else {
-        el.classList.remove('active');
+        this.hideCameraInterruptionWarning();
+        this.updateFaceIndicatorUI(true);
       }
-    });
+    } catch (e) {
+      // Stream not ready to draw
+    }
+  }
 
-    // Simulate match connection delay before entering Call page
-    setTimeout(() => {
-      const chosenMatch = this.generateRandomStranger();
-
-      this.state.currentMatch = chosenMatch;
-
-      // Fire premium match-found animation overlay + confetti burst
-      if (window.showMatchFoundAnimation) {
-        showMatchFoundAnimation(chosenMatch.name);
+  showCameraInterruptionWarning(customMsg = null) {
+    const overlay = document.getElementById('camera-warning-overlay');
+    if (overlay) {
+      overlay.style.display = 'flex';
+      const textEl = overlay.querySelector('p');
+      if (textEl) {
+        textEl.innerText = customMsg || "Camera is required. Please enable your camera to continue.";
       }
-      this.dispatchToast(`Match found! Connecting with ${chosenMatch.name}...`, 'success');
+    }
+    if (this.state.currentPage === 'video-view') {
+      if (this.localVideo) this.localVideo.style.opacity = '0.3';
+      if (this.remoteCanvas) this.remoteCanvas.style.opacity = '0.3';
+    }
+    this.updateFaceIndicatorUI(false, customMsg ? 'unstable' : 'error');
+  }
 
-      // Add match to friends list
-      this.addOrUpdateFriend(chosenMatch);
+  hideCameraInterruptionWarning() {
+    const overlay = document.getElementById('camera-warning-overlay');
+    if (overlay) {
+      overlay.style.display = 'none';
+    }
+    if (this.localVideo) this.localVideo.style.opacity = '1';
+    if (this.remoteCanvas) this.remoteCanvas.style.opacity = '1';
+  }
 
-      setTimeout(() => {
-        this.switchPage('video-view');
-        this.startCallSession();
-      }, 2400); // allow animation to play
-
-    }, 3800);
+  updateFaceIndicatorUI(isValid, state = 'optimal') {
+    const indicator = document.getElementById('local-face-status');
+    if (!indicator) return;
+    
+    if (isValid) {
+      indicator.style.display = 'flex';
+      indicator.className = 'face-status-badge';
+      indicator.innerHTML = `<i data-lucide="shield-check" class="icon-2xs" style="width: 10px; height: 10px;"></i> Face Verified`;
+    } else {
+      if (state === 'unstable') {
+        indicator.style.display = 'flex';
+        indicator.className = 'face-status-badge unstable';
+        indicator.innerHTML = `<i data-lucide="alert-triangle" class="icon-2xs" style="width: 10px; height: 10px;"></i> Feed Obstructed`;
+      } else {
+        indicator.style.display = 'none';
+      }
+    }
+    lucide.createIcons();
   }
 
   /**

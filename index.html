@@ -339,8 +339,7 @@
               <div class="avatar avatar-lg flex-center pulse-ring-glow" style="background: var(--bg-elevated);"><i data-lucide="camera" class="icon-lg" style="color: var(--accent-light);"></i></div>
             </div>
             <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
-              <button class="btn btn-primary" id="onboard-grant-camera">Grant Camera Permission</button>
-              <button class="btn btn-ghost btn-sm" onclick="app.nextOnboardingStep()">Skip camera (Use visual abstract filter)</button>
+              <button class="btn btn-primary" id="onboard-grant-camera" style="width: 100%;">Grant Camera Permission</button>
             </div>
           </div>
 
@@ -565,14 +564,16 @@
             <canvas id="remote-mock-canvas" class="video-feed" style="display: none;"></canvas>
           </div>
 
-          <!-- LOCAL USER FEED (FLOATING DRAGGABLE PIP CARD) -->
           <div class="local-preview-floating" id="local-video-container">
             <div class="video-feed-placeholder" id="local-placeholder">
-              <i data-lucide="user" class="icon-sm text-muted" style="margin-bottom: 4px;"></i>
-              <p class="text-muted" style="font-size: 10px;">Cam Off</p>
+              <i data-lucide="loader-2" class="icon-sm text-muted spin" style="margin-bottom: 4px;"></i>
+              <p class="text-muted" style="font-size: 10px;">Starting Camera...</p>
             </div>
             <video id="local-video-stream" class="video-feed" autoplay playsinline muted style="display: none; transform: scaleX(-1);"></video>
             <canvas id="local-mock-canvas" class="video-feed" style="display: none; transform: scaleX(-1);"></canvas>
+            <div class="face-status-badge" id="local-face-status" style="display: none;">
+              <i data-lucide="shield-check" class="icon-2xs" style="width: 10px; height: 10px;"></i> Face Verified
+            </div>
             <div class="video-label" style="bottom: 4px; left: 4px; padding: 3px 6px; font-size: 9px; border-radius: var(--radius-xs);">
               <span>You</span>
             </div>
@@ -609,16 +610,16 @@
               <i data-lucide="mic" class="icon"></i>
               <span class="tooltip">Toggle Audio</span>
             </button>
-            <button class="btn btn-secondary btn-icon-only tooltip-wrapper" id="ctrl-video">
+            <button class="btn btn-secondary btn-icon-only tooltip-wrapper" id="ctrl-video" style="display: none;">
               <i data-lucide="video" class="icon"></i>
               <span class="tooltip">Toggle Video</span>
             </button>
-            <button class="btn btn-secondary btn-icon-only tooltip-wrapper" id="ctrl-share">
+            <button class="btn btn-secondary btn-icon-only tooltip-wrapper" id="ctrl-share" style="display: none;">
               <i data-lucide="monitor" class="icon"></i>
               <span class="tooltip">Share Screen</span>
             </button>
             
-            <div style="width: 1px; height: 24px; background: var(--border); margin: 0 4px;"></div>
+            <div style="display: none; width: 1px; height: 24px; background: var(--border); margin: 0 4px;"></div>
             
             <button class="btn btn-primary btn-icon-only tooltip-wrapper" id="ctrl-next" style="background: var(--accent);">
               <i data-lucide="arrow-right" class="icon"></i>
@@ -1294,8 +1295,6 @@
                 </div>
                 <div class="select-options" id="camera-select-options">
                   <div class="select-option selected" data-value="default">Primary Web Camera</div>
-                  <div class="select-option" data-value="fallback-mock">Mock Aura Pattern Canvas</div>
-                  <div class="select-option" data-value="virtual">Virtual Cam (OBS)</div>
                 </div>
               </div>
             </div>
@@ -1627,6 +1626,22 @@
     </section>
 
   </main>
+
+  <!-- CAMERA ENFORCEMENT WARNING OVERLAY -->
+  <div id="camera-warning-overlay" class="camera-warning-overlay" style="display: none;">
+    <div class="camera-warning-content glass-panel">
+      <div class="camera-warning-icon-wrapper flex-center">
+        <i data-lucide="video-off" class="icon-lg animate-pulse" style="color: var(--danger); width: 48px; height: 48px;"></i>
+      </div>
+      <h2 style="font-size: var(--text-md); font-weight: 700; margin-bottom: 8px; color: var(--text-primary);">Camera Stream Interrupted</h2>
+      <p style="font-size: var(--text-xs); color: var(--text-secondary); max-width: 320px; line-height: 1.6; margin-bottom: 24px;">
+        Camera is required. Please enable your camera to continue.
+      </p>
+      <button class="btn btn-primary" id="retry-camera-btn" style="width: 100%;">
+        <i data-lucide="refresh-cw" class="icon-sm" style="margin-right: 6px;"></i> Retry Camera Connection
+      </button>
+    </div>
+  </div>
 
   <!-- Client JavaScript application logic -->
   <script src="app.js"></script>
